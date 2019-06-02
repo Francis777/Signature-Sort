@@ -4,7 +4,7 @@ OBJ_FILES := $(CPP_FILES:.cpp=.o)
 
 CPP_FLAGS = --std=c++17 
 
-all: bitonic_sorting packed_sort
+all: packed_sort
 
 $(OBJ_FILES) $(TARGET_CPPS:.cpp=.o): Makefile
 

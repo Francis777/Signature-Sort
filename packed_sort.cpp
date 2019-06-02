@@ -348,7 +348,7 @@ int main()
   	
   	printf("Original array: \n"); 
     for (int i=0; i<N; i++) 
-    	printf("%llu ", a[i]); 
+    	printf("%lu ", a[i]); 
     printf("\n");
 
     int up = 1;   // means sort in ascending order 
@@ -358,7 +358,7 @@ int main()
   
     printf("Sorted array: \n"); 
     for (int i=0; i<N; i++) 
-        printf("%llu ", a[i]); 
+        printf("%lu ", a[i]); 
     printf("\n");
     return 0; 
 }
