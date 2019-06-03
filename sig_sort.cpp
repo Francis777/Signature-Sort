@@ -5,7 +5,110 @@
 #include <iostream>
 #include "MSB64.cpp"
 #include <algorithm>
+#include <stdlib.h>
+#include <time.h>
+#include <memory>
+#include <cmath>
+#include "packed_sort.cpp"
+
 using namespace std;
+
+/*
+Currently we only accept n = 4,8,16,32 because of implementation details
+epsilon are  hard-coded for each input size
+*/
+double getepsilon(int n){
+    if (n == 4){
+        return 1.;
+    }else if (n == 16){
+        return 0.5;
+    }else if (n == 8){
+        return 1/log2(3);
+    }else{
+        return 0.05;
+    }
+}
+
+//Hash the given integer to a signature
+uint64_t getSig(uint64_t inputInt, int numChunk, int n, int w, uint64_t oddmask, uint64_t evenmask){
+    int sizeChunk = w/numChunk;
+
+    uint64_t  oddchunk = inputInt & oddmask;
+    uint64_t  evenchunk = inputInt & evenmask;
+   
+    cout << "oddchunk:" << endl;
+    cout << bitset<64>(oddchunk) << endl;
+    cout << "evenchunk: " << endl;
+    cout << bitset<64>(evenchunk) << endl;
+
+    //h(x) = (Ax mod 2^k) div 2^(k-l)     
+    int sizeDigit = 2*log2(n);
+    //cout << "sizeDigit: " << sizeDigit << endl;
+    double phiInv = 0.6180339887498948482045868343656;
+    uint64_t W = pow(2,sizeChunk);
+    uint64_t A = phiInv * W;
+    //cout << "A: " << A << endl;
+
+    uint64_t sigOdd = A * oddchunk;
+    uint64_t sigEven = A * evenchunk;
+
+    cout << "sigOdd: " << endl;
+    cout << bitset<64>(sigOdd) << endl;
+    cout << "sigEven: " << endl;
+    cout << bitset<64>(sigEven) << endl;
+
+    //concatenate odd and even digits
+    uint64_t sig = 0;
+    uint64_t sigtoadd = 0;
+  
+    uint64_t a = 1;
+    uint64_t maskRecover = (a << sizeDigit) - 1;
+
+    for (int i = 1; i <= numChunk; i++){
+        if (i % 2 == 1){
+            sigOdd = sigOdd >> (sizeChunk - sizeDigit);
+            sigtoadd =  maskRecover & sigOdd;
+            sigOdd = sigOdd >> (sizeChunk + sizeDigit);
+        }else{
+            sigEven = sigEven >> (2*sizeChunk -sizeDigit);
+            sigtoadd = maskRecover & sigEven;
+            sigEven = (sigEven >> sizeDigit);
+        }
+        sig = sig | (sigtoadd << ((i-1)*sizeDigit));
+    }
+
+    return sig;
+}
+
+// hashing n *(log n)^epsilon "digit"
+// each "digit"  OMEGA(w/(log n)^epsilon) bits -> O(log n) bits
+uint64_t* hashing(uint64_t* inputInts,int n,int w)
+{
+    double epsilon = getepsilon(n);
+    uint64_t* sigs = new uint64_t [n];
+    int numChunk = rint(pow(log2(n),epsilon));
+    int sizeChunk = w/numChunk;
+
+    //construct odd and even masks
+    uint64_t oddmask = 0;
+    uint64_t evenmask = 0;
+
+    for (int i = 1; i <= numChunk; i ++){
+        if (i % 2 == 1){
+            uint64_t a = 1;
+            oddmask = (oddmask << (2*sizeChunk)) | ((a << sizeChunk) - 1);
+        }else{
+            uint64_t a = 1;
+            evenmask = (evenmask << sizeChunk | ((a << sizeChunk) - 1)) << sizeChunk;
+        }
+    }
+
+    //compute the hashed signatures
+    for (int i = 0; i < n; i++){
+        sigs[i] = getSig(inputInts[i],numChunk,n,w,oddmask,evenmask);
+    } 
+    return sigs;
+}
 
 //This function computes the most significant bit of an integer 
 unsigned int mss(uint64_t num){
@@ -26,6 +129,7 @@ int pow(int base, int exp){
   }
 }
 
+//Node structure of a patricia trie
 struct Node{
   Node **children;
   int numChildren;
@@ -47,6 +151,7 @@ struct Node{
   };
 };
 
+//Patricia Trie structure
 struct PatriciaTrie{
   Node *root;
   stack <Node *> *rightSpline;
@@ -148,9 +253,9 @@ struct PatriciaTrie{
   //prints the structure of the Patricia Trie
   void printTree(Node *node){
     cout << "Node ID: " << node->node_id << endl;
-    cout << "Node value: " << node->val << endl;
+    //cout << "Node value: " << node->val << endl;
     cout << "Node bitmap: " << bitset<9>(node->val) << endl;
-    cout << "Sort value: " << bitset<9>(node->sort_val) << endl;
+    //cout << "Sort value: " << bitset<9>(node->sort_val) << endl;
     cout << "Sig idx: " << node->sig_idx << endl;
     cout << "len: " << node->len << endl << endl;
     if (node->children != nullptr){
@@ -304,38 +409,82 @@ uint64_t* sortSignatures(int n,int numChunks,int chunkSize, uint64_t* sigs){
 }
 
 int main(){
-  uint64_t num = 16;
-  cout << "num: " << num << endl;
-  //cout << "hex: " << hex << num << endl;
-  cout << "mss: " << mss(num) << endl;
-  
   //Input data
-  int n=9;
-  int numChunks=3;
-  int chunkSize=3;
-  uint64_t sigs [n];
-  sigs[0] = 0;
-  sigs[1] = 56;
-  sigs[2] = 57;
-  sigs[3] = 62;
-  sigs[4] = 320;
-  sigs[5] = 391;
-  sigs[6] = 447;
-  sigs[7] = 449;
-  sigs[8] = 454;
+  int n = 8;
+  int w = 64;
+
+  //Generate integer input
+  uint64_t* randomArray = new uint64_t[n];
+  cout <<"Input integers:" << endl;
+
+  /*
+  srand((uint64_t)time(NULL));
+  for (int i = 0; i < n; i++){
+    randomArray[i] = ((uint64_t)rand() << 32) | rand();
+  }*/
+
+  randomArray[0] = 123423423467;
+  randomArray[1] = 908567975396664;
+  randomArray[2] = 23987897454869;
+  randomArray[3] = 9871128937934;
+  randomArray[4] = 1234;
+  randomArray[5] = 758567975394;
+  randomArray[6] = 3455345609892;
+  randomArray[7] = 6598;
+
+  for (int i = 0; i<n; i++){
+    cout << bitset<64>(randomArray[i]) << endl;  
+  }
+  cout << endl;
+
+  double epsilon = getepsilon(n);
+  int numChunk = rint(pow(log2(n),epsilon));
+  int digitSize = 2*log2(n);
+  int sigSize = digitSize * numChunk; 
+  cout << "numChunk: " << numChunk << endl;
+  cout << "digitSize: " << digitSize << endl;
+  cout << endl;
+
+  //Hash signatures
+  uint64_t* hashed_sigs = hashing(randomArray,n,w);
+
+  //Output hashed signatures
+  cout << endl << "Signatures:" << endl;
+  for (int i = 0; i < n; i++){
+    cout << bitset<12>(hashed_sigs[i]) << endl;
+  }
+  cout << endl;
+
+  //Sort signatures using packed sort
 
 
-  cout << "Unsorted signatures: " << endl;
+  //Input data
+  n=9;
+      int numChunks=3;
+        int chunkSize=3;
+          uint64_t sigs [n];
+            sigs[0] = 0;
+              sigs[1] = 56;
+                sigs[2] = 57;
+                  sigs[3] = 62;
+                    sigs[4] = 320;
+                      sigs[5] = 391;
+                        sigs[6] = 447;
+                          sigs[7] = 449;
+                            sigs[8] = 454;
+  
+  cout << "Sorted signatures: " << endl;
   
   for (int i=0;i<n;i++){
     cout << sigs[i] << endl;
-    cout << bitset<9>(sigs[i]) << endl;
+    cout << bitset<24>(sigs[i]) << endl;
   }
 
   uint64_t* ans = sortSignatures(n,numChunks,chunkSize,sigs);
-  cout << "Sorted signatures: " << endl;
+  cout << "Sorted integers: " << endl;
   
   for (int i=0;i<n;i++){
     cout << ans[i] << endl;
   }
+  
 }

@@ -7,88 +7,51 @@
 #include<bitset>
 using namespace std;
 
-uint64_t*  hashing(uint64_t*  inputInts,int n);
-uint64_t getSig(uint64_t inputInt, int numChunk, int n);
-uint64_t createMask(int a, int b);
-double getepsilon(int n);
-
-
-// hashing n *(log n)^epsilon "digit"
-// each "digit"  OMEGA(w/(log n)^epsilon) bits -> O(log n) bits
-
-uint64_t* hashing(uint64_t*  inputInts,int n)
-{
-    double epsilon = getepsilon(n);
-    uint64_t* sigs = new uint64_t [n];
-    int numchunk = rint(pow(log2(n),epsilon));
-    for (int i = 0; i < n; i++){
-        sigs[i] = getSig(inputInts[i],numchunk,n);
-    } 
-    return sigs;
+/*
+Currently we only accept n = 4,8,16,32 because of implementation details
+epsilon are  hard-coded for each input size
+*/
+double getepsilon(int n){
+    if (n == 4){
+        return 1.;
+    }else if (n == 16){
+        return 0.5;
+    }else if (n == 8){
+        return 1/log2(3);
+    }else{
+        return 0.05;
+    }
 }
 
-uint64_t getSig(uint64_t inputInt, int numChunk, int n){
-    int w = 64;
+//Hash the given integer to a signature
+uint64_t getSig(uint64_t inputInt, int numChunk, int n, int w, uint64_t oddmask, uint64_t evenmask){
     int sizeChunk = w/numChunk;
 
-    /*
-       odd and even chunk
-     */    
-
-    uint64_t oddmask = 0;
-    uint64_t evenmask = 0;
-
-    cout << "numChunk: " << numChunk << endl;
-    cout << "sizeChunk: " << sizeChunk << endl;
-
-    for (int i = 1; i <= numChunk; i ++){
-        if (i % 2 == 1){
-            // odd mask
-            //oddmask += createMask((i-1)*sizeChunk, i*sizeChunk-1);
-            uint64_t a = 1;
-            oddmask = (oddmask << (2*sizeChunk)) | ((a << sizeChunk) - 1);
-        }else{
-            // even mask
-            //evenmask += createMask((i-1)*sizeChunk, i*sizeChunk-1);
-            uint64_t a = 1;
-            evenmask = (evenmask << sizeChunk | ((a << sizeChunk) - 1)) << sizeChunk;
-        }
-    }
- 
-    cout << "oddmask:" << endl;
-    cout << bitset<64>(oddmask) << endl;
-    cout << "evenmask: " << endl;
-    cout << bitset<64>(evenmask) << endl;
- 
     uint64_t  oddchunk = inputInt & oddmask;
     uint64_t  evenchunk = inputInt & evenmask;
    
-    cout << "oddchunk:" << endl;
-    cout << bitset<64>(oddchunk) << endl;
-    cout << "evenchunk: " << endl;
-    cout << bitset<64>(evenchunk) << endl;
+    //cout << "oddchunk:" << endl;
+    //cout << bitset<64>(oddchunk) << endl;
+    //cout << "evenchunk: " << endl;
+    //cout << bitset<64>(evenchunk) << endl;
 
-
-    /*
-       h(x) = (ax mod 2^k) div 2^(k-l)
-     */
-     
+    //h(x) = (Ax mod 2^k) div 2^(k-l)     
     int sizeDigit = 3*log2(n);
-    cout << "sizeDigit: " << sizeDigit << endl;
+    //cout << "sizeDigit: " << sizeDigit << endl;
     double phiInv = 0.6180339887498948482045868343656;
     uint64_t W = pow(2,sizeChunk);
     uint64_t A = phiInv * W;
+    //cout << "A: " << A << endl;
 
     uint64_t sigOdd = A * oddchunk;
     uint64_t sigEven = A * evenchunk;
 
-    cout << "sigOdd: " << endl;
-    cout << bitset<64>(sigOdd) << endl;
-    cout << "sigEven: " << endl;
-    cout << bitset<64>(sigEven) << endl;
-    /*
-      concatenate odd and even digits
-     */
+    //cout << "sigOdd: " << endl;
+    //cout << bitset<64>(sigOdd) << endl;
+    //cout << "sigEven: " << endl;
+    //cout << bitset<64>(sigEven) << endl;
+
+    //concatenate odd and even digits
     uint64_t sig = 0;
     uint64_t sigtoadd = 0;
   
@@ -108,63 +71,74 @@ uint64_t getSig(uint64_t inputInt, int numChunk, int n){
         sig = sig | (sigtoadd << ((i-1)*sizeDigit));
     }
 
-    cout << "sig: " << endl;
-    cout << bitset<64>(sig) << endl;
     return sig;
-    
 }
 
-uint64_t createMask(int a, int b){
-    uint64_t r = 0;
-    for (int i=a; i<=b; i++)
-        r |= 1 << i;
-    return r;
-}
+// hashing n *(log n)^epsilon "digit"
+// each "digit"  OMEGA(w/(log n)^epsilon) bits -> O(log n) bits
+uint64_t* hashing(uint64_t* inputInts,int n,int w)
+{
+    double epsilon = getepsilon(n);
+    uint64_t* sigs = new uint64_t [n];
+    int numChunk = rint(pow(log2(n),epsilon));
+    int sizeChunk = w/numChunk;
 
+    //construct odd and even masks
+    uint64_t oddmask = 0;
+    uint64_t evenmask = 0;
 
-/*
-here we only accept n = 4,8,16,32
-epsilon are  hard-coded for each input size
-*/
-double getepsilon(int n){
-    if (n == 4){
-        return 1.;
-    }else if (n == 16){
-        return 0.5;
-    }else if (n == 8){
-        return 1/log2(3);
-    }else{
-        return 0.05;
+    for (int i = 1; i <= numChunk; i ++){
+        if (i % 2 == 1){
+            uint64_t a = 1;
+            oddmask = (oddmask << (2*sizeChunk)) | ((a << sizeChunk) - 1);
+        }else{
+            uint64_t a = 1;
+            evenmask = (evenmask << sizeChunk | ((a << sizeChunk) - 1)) << sizeChunk;
+        }
     }
+
+    //compute the hashed signatures
+    for (int i = 0; i < n; i++){
+        sigs[i] = getSig(inputInts[i],numChunk,n,w,oddmask,evenmask);
+    } 
+    return sigs;
 }
+
 
 int main()
 {
-    int sizeInput = 16;
-    uint64_t* randomArray = new uint64_t[sizeInput];
+    //input parameters
+    int n = 16;
+    int w = 64;
 
+    //Generate random integer input
+    uint64_t* randomArray = new uint64_t[n];
     cout <<"Input integers:" << endl;
     srand((uint64_t)time(NULL));
-
-    for (int i = 0; i < sizeInput; i++){
-      randomArray[i] = rand();
+    for (int i = 0; i < n; i++){
+      randomArray[i] = ((uint64_t)rand() << 32) | rand();
     }
-    randomArray[0] = 324737983498;
-    randomArray[1] = 2342342341111;
-
-    for (int i = 0; i< sizeInput;i++){
-      cout << randomArray[i] << endl;  
+    for (int i = 0; i<n; i++){
+      cout << bitset<64>(randomArray[i]) << endl;  
     }
+    cout << endl;
 
+    double epsilon = getepsilon(n);
+    int numChunk = rint(pow(log2(n),epsilon));
+    int digitSize = 3*log2(n);
+    int sigSize = digitSize * numChunk; 
+    cout << "numChunk: " << numChunk << endl;
+    cout << "digitSize: " << digitSize << endl;
+
+    //Hash signatures
+    uint64_t* sigs = hashing(randomArray,n,w);
+
+    //Output hashed signatures
     cout << endl << "Signatures:" << endl;
+    for (int i = 0; i < n; i++){
+      cout << bitset<24>(sigs[i]) << endl;
+    }
+    cout << endl;
 
-    uint64_t* sigs = hashing(randomArray,sizeInput);
-
-
-    for (int i = 0; i < sizeInput; i++)
-        {
-            cout << sigs[i] << endl;
-        }
-    
     return 0;    
 }

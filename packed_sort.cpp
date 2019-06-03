@@ -216,7 +216,7 @@ void print_packed_array(uint64_t a[], int low, int cnt, int b){
 	de_pack(result,a_backup,0,cnt,b);
 	printf("it's: "); 
     for (int i=0; i < cnt; i++) 
-        printf("%llu,", result[i]); 
+        printf("%llu,", (long long unsigned int)result[i]); 
     printf("\n");
     return; 
 }
@@ -334,7 +334,7 @@ void rand_n(uint64_t a[], int n, uint64_t x){
 		a[i] = rand()%x;
 	}
 }
-
+/*
 // Driver code 
 int main() 
 { 
@@ -362,3 +362,4 @@ int main()
     printf("\n");
     return 0; 
 }
+*/
